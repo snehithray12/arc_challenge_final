@@ -7,12 +7,12 @@ from datetime import datetime as dt
 from ARC_objects import Grid, GridObject, update_object_numbers
 from new_samplers import *
 from actions import *
+from vision import get_problem_setup, perform_object_detection_type
 import numpy as np
 import math
 import traceback
 import sys
 import asyncio
-from visualizer import visualize_single_index, visualize_feature_list
 from anthropic import AsyncAnthropic, Anthropic
 from itertools import permutations
 
@@ -39,6 +39,10 @@ CLAUDE_MODEL_SYNC = Anthropic(
 def get_rules_from_directory(directory):
     rules_dict_1 = {}
     rules_dict_2 = {}
+    if not os.path.isdir(directory):
+        rules_dict_1[89] = "Rule not available"
+        rules_dict_2[89] = "Rule not available"
+        return rules_dict_1, rules_dict_2
     for filename in os.listdir(directory):
         if '.txt' in filename:
             question_number = int(filename.split('_')[5])
@@ -248,7 +252,7 @@ class SameSizeObjectCentricProgramSearchEnvironment:
 
     ###uses LLM to randomly generate a new program 
     async def generate_new_program_llm(self, which_llm, abridge=False):
-        while self._number_llm_generated_programs < 25:
+        while self._number_llm_generated_programs < self._target_llm_programs:
             print("generating new program llm ", self._number_llm_generated_programs)
             start_time = time.time()
             context_prompt = create_context_for_caching()
@@ -273,7 +277,7 @@ class SameSizeObjectCentricProgramSearchEnvironment:
     def _save_response_to_file(self, response, model_name):
         filename = f"results/11_23_llm_generated_responses/llmresponse_vision_mode_{self._perception_mode}_question_{self._index}_number_{100 + self._number_llm_generated_programs}.txt"
         print("saving to file: ", filename)
-        save_string_to_file(response, filename)
+        # save_string_to_file(response, filename)
 
     def _record_generation_time(self, start_time):
         end_time = time.time()
@@ -568,11 +572,11 @@ class SameSizeObjectCentricProgramSearchEnvironment:
         current_program_str = current_program_obj.get_display_text()
         mutate_prompt = create_fill_in_partial_program_code_prompt_body(input_list = input_list, actual_output_list = actual_output_list, pred_output_list = pred_output_list, current_program = current_program_str)
         context_prompt = create_context_for_caching()
-        for x in range(10):
+        for x in range(1):
             try:
                 response = prompt_anthropic_large_sync(client = CLAUDE_MODEL_SYNC, context = context_prompt, prompt = mutate_prompt)
                 filename = 'results/11_26_llm_generated_responses/' + 'llmresponse_vision_mode_{}_question_{}_number_{}.txt'.format(self._perception_mode, self._index, x)
-                save_string_to_file(response, filename)
+                # save_string_to_file(response, filename)
                 print("got claude response number {} ".format(x))
             except Exception as e:
                 print("Error occurred: ", str(e))
@@ -693,9 +697,9 @@ class SameSizeObjectCentricProgramSearchEnvironment:
         print("population size: ", len(self._current_population))
         loop_limit = 1
         self.sort_by_performance()
-        return self._population_sorted_by_performance[0][0]
-
-
+        best_program = self._population_sorted_by_performance[0][0]
+        self.mutate_program_llm(program = best_program)
+        return best_program
 
     def local_search(self, program, action_set = None, properties_set = None):
         old_params = program.get_parameters()
@@ -748,15 +752,15 @@ class SameSizeObjectCentricProgramSearchEnvironment:
                     found_answer = True
                     program_text = best_program.get_text()
                     filename = 'results/11_23_program_search_results/' + 'program_vision_mode_{}_question_{}_number_{}.txt'.format(self._perception_mode, self._index, 1)
-                    save_string_to_file(program_text, filename)
+                    # save_string_to_file(program_text, filename)
                     return best_program
 
 
     async def run_non_llm_search_funcs(self, action_set, properties_set):
         self.run_enumerative_search(is_async = True, action_set = action_set, properties_set = properties_set)
         await asyncio.sleep(0)
-        while self._number_llm_generated_programs < 25:
-            self.run_random_changes(action_set = action_set, properties_set = properties_set)
+        while self._number_llm_generated_programs < self._target_llm_programs:
+            await self.run_random_changes(action_set = action_set, properties_set = properties_set)
             await asyncio.sleep(0)
 
 
@@ -819,6 +823,3 @@ class SameSizeObjectCentricProgramSearchEnvironment:
         print(f"Error Makeup Dictionary: {self.get_error_makeup_dict()}")
     
         
-env = SameSizeObjectCentricProgramSearchEnvironment(group = "eval", index = 89, perception_mode = 1, target_population_size = 10, time_limit = 10, target_llm_programs= 10)
-
-env.run_program_search()

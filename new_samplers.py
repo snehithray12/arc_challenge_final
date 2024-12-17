@@ -1,4 +1,4 @@
-from evolution_search_utils import indent
+from utils import indent
 from Program import SameSizeObjectCentricProgram, extract_transformation_number, get_empty_program_params
 from evolution_search_utils import get_variable_value, process_plus_string, count_leading_spaces, extract_extend_parameter_name
 import re
